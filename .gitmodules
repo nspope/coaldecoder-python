@@ -1,0 +1,4 @@
+[submodule "carma"]
+    path = extern/carma
+    url = https://github.com/rurlus/carma.git
+    branch = stable
