@@ -1,9 +1,6 @@
 [submodule "extern/pybind11"]
 	path = extern/pybind11
 	url = https://github.com/pybind/pybind11
-[submodule "extern/carma"]
-	path = extern/carma
-	url = https://github.com/rurlus/carma
 [submodule "extern/armadillo-code"]
 	path = extern/armadillo-code
-	url = https://gitlab.com/conradsnicta/armadillo-code.git
+	url = https://gitlab.com/conradsnicta/armadillo-code

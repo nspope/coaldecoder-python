@@ -1,43 +1,31 @@
-#include <pybind11/pybind11.h>
+#include "convert.hpp"
 
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
-
-int add(int i, int j) {
-    return i + j;
+// --- test
+//
+pyarr<double> add_cube(const pyarr<double> a, const pyarr<double> b) {
+    arma::cube A = to_cube<double>(a);
+    arma::cube B = to_cube<double>(b);
+    arma::cube C = A + B;
+    return from_cube<double>(C);
 }
 
-namespace py = pybind11;
+pyarr<double> add_mat(const pyarr<double> a, const pyarr<double> b) {
+    arma::mat A = to_mat<double>(a);
+    arma::mat B = to_mat<double>(b);
+    arma::mat C = A + B;
+    return from_mat<double>(C);
+}
+
+pyarr<double> add_col(const pyarr<double> a, const pyarr<double> b) {
+    arma::vec A = to_vec<double>(a);
+    arma::vec B = to_vec<double>(b);
+    arma::vec C = A + B;
+    return from_vec<double>(C);
+}
+
 
 PYBIND11_MODULE(cmake_example, m) {
-    m.doc() = R"pbdoc(
-        Pybind11 example plugin
-        -----------------------
-
-        .. currentmodule:: cmake_example
-
-        .. autosummary::
-           :toctree: _generate
-
-           add
-           subtract
-    )pbdoc";
-
-    m.def("add", &add, R"pbdoc(
-        Add two numbers
-
-        Some other explanation about the add function.
-    )pbdoc");
-
-    m.def("subtract", [](int i, int j) { return i - j; }, R"pbdoc(
-        Subtract two numbers
-
-        Some other explanation about the subtract function.
-    )pbdoc");
-
-#ifdef VERSION_INFO
-    m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-    m.attr("__version__") = "dev";
-#endif
+    m.def("add_cube", &add_cube);
+    m.def("add_mat", &add_mat);
+    m.def("add_col", &add_col);
 }
