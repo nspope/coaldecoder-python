@@ -3,6 +3,8 @@ dist/
 _build/
 _generate/
 *.so
+*.swp
+*.swo
 *.py[cod]
 *.egg-info
 *env*

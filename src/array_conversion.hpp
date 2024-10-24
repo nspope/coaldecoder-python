@@ -1,5 +1,5 @@
-#ifndef CONVERT_HPP
-#define CONVERT_HPP
+#ifndef ARRAY_CONVERSION_HPP
+#define ARRAY_CONVERSION_HPP
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
