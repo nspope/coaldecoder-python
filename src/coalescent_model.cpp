@@ -46,8 +46,6 @@ struct CoalescentEpoch
   const arma::umat state_mapping;
   const arma::umat initial_mapping;
 
-  const arma::vec y; //observed statistics
-  const arma::vec B; //bootstrap sqrt(precision) of y
   const arma::mat A; //admixture proportions
   const arma::mat M; //demographic parameters
   const double t; //duration of epoch
@@ -61,43 +59,28 @@ struct CoalescentEpoch
 
   CoalescentEpoch (
     arma::mat& _states,
-    const arma::vec& _y, 
-    const arma::vec& _B,
-    const arma::mat& _M,
-    const arma::mat& _A,
-    const double& _t,
+    const arma::mat& _migration_matrix,
+    const arma::mat& _admixture_matrix,
+    const double _time_step,
     // mappings
-    const arma::sp_mat& _rate_matrix_template,
     const arma::umat& _emission_mapping,
     const arma::umat& _state_mapping,
     const arma::umat& _initial_mapping,
     const bool _check_valid = true
   ) 
     : check_valid (_check_valid)
-    , admix_matrix (_A, _check_valid)
-    , rate_matrix (_M, _check_valid)
+    , admix_matrix (_admixture_matrix, _check_valid)
+    , rate_matrix (_migration_matrix, _check_valid)
     , emission_mapping (_emission_mapping)
     , state_mapping (_state_mapping)
     , initial_mapping (_initial_mapping)
-    , y (_y)
-    , B (_B)
-    , A (_A)
-    , M (_M)
-    , t (_t)
+    , A (_admixture_matrix)
+    , M (_migration_matrix)
+    , t (_time_step)
   {
     /* 
      *  Update states and calculate likelihood, gradient of emissions within epoch.
      */
-
-    if (_y.n_elem != emission_mapping.n_cols) 
-    {
-      throw std::invalid_argument(prefix + "Vector of rates has the wrong dimension");
-    }
-
-    if (_B.n_elem != emission_mapping.n_cols)
-    {
-      throw std::invalid_argument(prefix + "Bootstrap precision has the wrong dimension");
-    }
 
     if (_states.n_rows != arma::accu(rate_matrix.S) || 
         _states.n_cols != initial_mapping.n_cols)
@@ -107,13 +90,11 @@ struct CoalescentEpoch
 
     if (check_valid)
     {
-      if (_t <= 0.0)
+      if (t <= 0.0)
       {
         throw std::invalid_argument(prefix + "Epoch duration must be positive");
       }
 
-      //arma::rowvec colsum_check = arma::sum(_states, 0);
-      //if (arma::any(arma::abs(colsum_check - 1.0)/(1.0 + arma::abs(colsum_check)) > left_stochastic_tol))
       if (arma::any(arma::abs(arma::sum(_states, 0) - 1.0) > left_stochastic_tol))
       {
         throw std::invalid_argument(prefix + "State probability vector does not sum to one");
@@ -127,16 +108,15 @@ struct CoalescentEpoch
     unsigned num_emission = emission_mapping.n_cols;
     unsigned num_initial = initial_mapping.n_cols;
 
-    // Admixture
+    // admixture
     states = _states;
     _states = admix_matrix.X * _states;
 
-    // Transition probabilities
+    // transition probabilities
     SparseMatrixExponentialMultiply transition (arma::trans(rate_matrix.X), _states, t);
-    //SparseMatrixExponentialMultiplySafe transition (arma::trans(rate_matrix.X), _states, t);
     _states = transition.result;
 
-    // Fitted rates
+    // fitted rates
     arma::vec transitory_start = arma::ones(num_initial);
     arma::vec coalesced_start = arma::zeros(num_emission);
     arma::vec coalesced_end = arma::zeros(num_emission);
@@ -178,28 +158,26 @@ struct CoalescentEpoch
       }
     }
 
-    y_hat = (coalesced_end - coalesced_start) / uncoalesced;
-    y_hat /= t;
-
-    // Calculate loglikelihood 
-    // TODO move this outside of cpp ?
-    residual = B % (y - y_hat);
-    gradient = B % residual;
-    loglikelihood = -0.5 * arma::dot(residual, residual);
+    y_hat = (coalesced_end - coalesced_start) / uncoalesced / t;
   }
 
-  arma::cube reverse_differentiate (arma::mat& _states)
+  arma::cube reverse_differentiate (arma::mat& _states, const arma::mat& _gradient)
   {
     if (_states.n_rows != arma::accu(rate_matrix.S) || _states.n_cols != initial_mapping.n_cols)
     {
       throw std::invalid_argument(prefix + "State gradient vectors have the wrong dimension");
     }
 
+    if (_gradient.n_rows != y_hat.n_rows)
+    {
+      throw std::invalid_argument(prefix + "Rate gradient vectors have the wrong dimension");
+    }
+
     unsigned num_emission = emission_mapping.n_cols;
     unsigned num_initial = initial_mapping.n_cols;
 
     // Gradient wrt fitted rates
-    arma::vec d_y_hat = gradient * 1.0 / t;
+    arma::vec d_y_hat = _gradient * 1.0 / t;
 
     // Gradient wrt state vectors
     arma::mat d_states = arma::zeros(arma::size(states));
@@ -239,9 +217,9 @@ struct CoalescentEpoch
     // Gradient wrt starting state vectors, trio rate matrix
     // (this adds gradient contribution to existing d_states)
     SparseMatrixExponentialMultiply transition (arma::trans(rate_matrix.X), admix_matrix.X * states, t);
-    arma::mat tmp;
-    arma::sp_mat d_rate_matrix = transition.reverse_differentiate(tmp, _states); 
-    _states = tmp;
+    arma::mat _updated_states;
+    arma::sp_mat d_rate_matrix = transition.reverse_differentiate(_updated_states, _states); 
+    _states = _updated_states;
 
     // Gradient wrt pre-admixture state vectors, trio admixture matrix
     arma::sp_mat d_admix_matrix (arma::size(admix_matrix.X));
@@ -269,26 +247,22 @@ struct CoalescentDecoder
   const bool check_valid = true;
   const bool use_marginal_statistics = true; //see notes in method coalescence_rate
 
-  const unsigned P; //number of populations
-  const arma::vec t; // epoch duration
-  const unsigned T; //number of epochs TODO order here is because of constructor--why are we storing `t` anyway
-  const TrioTransitionRates rate_matrix_template;
+  const unsigned num_populations;
+  const TrioTransitionRates rate_matrix;
   const arma::umat emission_mapping;
   const arma::umat state_mapping;
   const arma::umat initial_mapping;
+  std::vector<CoalescentEpoch> epochs;
 
   CoalescentDecoder (
-    const unsigned _P, // number of populations
-    const pyarr<double> _t, // epoch duration [TODO: why is this passed in constructor?]
-    const bool _check_valid = true
-  ) : check_valid (_check_valid)
-    , P (_P)
-    , t (to_vec<double>(_t))
-    , T (t.n_elem)
-    , rate_matrix_template (arma::ones(_P, _P))
-    , emission_mapping (rate_matrix_template.emission_to_initial())
-    , state_mapping (rate_matrix_template.states_to_emission())
-    , initial_mapping (rate_matrix_template.initial_to_states())
+    const unsigned num_populations,
+    const bool check_valid = true
+  ) : check_valid (check_valid)
+    , num_populations (num_populations)
+    , rate_matrix (arma::ones(num_populations, num_populations))
+    , emission_mapping (rate_matrix.emission_to_initial())
+    , state_mapping (rate_matrix.states_to_emission())
+    , initial_mapping (rate_matrix.initial_to_states())
   {}
 
 //  pyarr<double> coalescence_rates (pyarr<double> py_y, pyarr<double> py_n, pyarr<double> py_t, const bool use_rates = true)
@@ -337,19 +311,19 @@ struct CoalescentDecoder
 //    return from_mat<double>(y);
 //  }
 
-  std::vector<std::string> initial_states (const std::vector<std::string>& _names) const
+  std::vector<std::string> initial_states (const std::vector<std::string>& names) const
   {
-    return rate_matrix_template.initial_states(_names);
+    return rate_matrix.initial_states(names);
   }
 
-  std::vector<std::string> emission_states (const std::vector<std::string>& _names) const
+  std::vector<std::string> emission_states (const std::vector<std::string>& names) const
   {
-    return rate_matrix_template.emission_states(_names);
+    return rate_matrix.emission_states(names);
   }
 
-  std::vector<std::string> transitory_states (const std::vector<std::string>& _names) const
+  std::vector<std::string> transitory_states (const std::vector<std::string>& names) const
   {
-    return rate_matrix_template.transitory_states(_names);
+    return rate_matrix.transitory_states(names);
   }
 
 //  arma::sp_mat transition_rates (const arma::mat& _M)
@@ -358,7 +332,7 @@ struct CoalescentDecoder
 //     *  Return trio transition rate matrix given demographic parameters
 //     */
 //
-//    TrioTransitionRates rates (_M, rate_matrix_template.X, check_valid);
+//    TrioTransitionRates rates (_M, rate_matrix.X, check_valid);
 //    return rates.X;
 //  }
 //
@@ -579,126 +553,143 @@ struct CoalescentDecoder
 //        );
 //  }
 //
-  py::tuple loglikelihood (pyarr<double> py_y, pyarr<double> py_B, pyarr<double> py_X, pyarr<double> py_M, pyarr<double> py_A)
-  {
-    /*
-     *  Calculate likelihood, gradient of migration and admixture parameters
-     *  given starting state
-     */
+//  py::tuple loglikelihood (pyarr<double> py_y, pyarr<double> py_B, pyarr<double> py_X, pyarr<double> py_M, pyarr<double> py_A)
+//  {
+//    /*
+//     *  Calculate likelihood, gradient of migration and admixture parameters
+//     *  given starting state
+//     */
+//
+//    arma::mat _y = to_mat<double>(py_y);
+//    arma::mat _B = to_mat<double>(py_B);
+//    arma::mat _X = to_mat<double>(py_X);
+//    arma::cube _M = to_cube<double>(py_M);
+//    arma::cube _A = to_cube<double>(py_A);
+//
+//    if (_y.n_cols != T)
+//    {
+//      throw std::invalid_argument(prefix + "Rate statistics matrix has the wrong dimensions");
+//    }
+//
+//    if (_B.n_cols != T)
+//    {
+//      throw std::invalid_argument(prefix + "Precision matrix list is the wrong dimension");
+//    }
+//
+//    if (_M.n_slices != T)
+//    {
+//      throw std::invalid_argument(prefix + "Demographic parameter array has the wrong dimensions");
+//    }
+//
+//    if (_A.n_slices != T)
+//    {
+//      throw std::invalid_argument(prefix + "Admixture parameter array has the wrong dimensions");
+//    }
+//
+//    std::vector<CoalescentEpoch> epochs;
+//    epochs.reserve(T);
+//
+//    arma::mat y_hat (emission_mapping.n_cols, T);
+//    arma::mat residuals (emission_mapping.n_cols, T);
+//
+//    double loglik = 0.;
+//    for (unsigned i = 0; i < T; ++i)
+//    {
+//      epochs.emplace_back(
+//          _X, _y.col(i), _B.col(i), _M.slice(i), _A.slice(i), t.at(i), rate_matrix.X,
+//          emission_mapping, state_mapping, initial_mapping, check_valid
+//      );
+//      y_hat.col(i) = epochs[i].y_hat;
+//      residuals.col(i) = epochs[i].residual;
+//      loglik += epochs[i].loglikelihood;
+//    }
+//
+//    arma::mat gradient_X = arma::zeros(arma::size(_X));
+//    arma::cube gradient_M (arma::size(_M));
+//    arma::cube gradient_A (arma::size(_A));
+//
+//    for (int i = T - 1; i >= 0; --i)
+//    {
+//      arma::cube gradient_parameters = epochs[i].reverse_differentiate(gradient_X);
+//      gradient_M.slice(i) = gradient_parameters.slice(0);
+//      gradient_A.slice(i) = gradient_parameters.slice(1);
+//    }
+//
+//    return py::make_tuple(
+//      loglik,
+//      from_mat<double>(_X), 
+//      from_mat<double>(y_hat), 
+//      from_mat<double>(residuals),
+//      from_mat<double>(gradient_X),
+//      from_cube<double>(gradient_M),
+//      from_cube<double>(gradient_A)
+//    );
+//  }
 
-    arma::mat _y = to_mat<double>(py_y);
-    arma::mat _B = to_mat<double>(py_B);
-    arma::mat _X = to_mat<double>(py_X);
-    arma::cube _M = to_cube<double>(py_M);
-    arma::cube _A = to_cube<double>(py_A);
-
-    if (_y.n_cols != T)
-    {
-      throw std::invalid_argument(prefix + "Rate statistics matrix has the wrong dimensions");
-    }
-
-    if (_B.n_cols != T)
-    {
-      throw std::invalid_argument(prefix + "Precision matrix list is the wrong dimension");
-    }
-
-    if (_M.n_slices != T)
-    {
-      throw std::invalid_argument(prefix + "Demographic parameter array has the wrong dimensions");
-    }
-
-    if (_A.n_slices != T)
-    {
-      throw std::invalid_argument(prefix + "Admixture parameter array has the wrong dimensions");
-    }
-
-    std::vector<CoalescentEpoch> epochs;
-    epochs.reserve(T);
-
-    arma::mat y_hat (emission_mapping.n_cols, T);
-    arma::mat residuals (emission_mapping.n_cols, T);
-
-    double loglik = 0.;
-    for (unsigned i = 0; i < T; ++i)
-    {
-      epochs.emplace_back(
-          _X, _y.col(i), _B.col(i), _M.slice(i), _A.slice(i), t.at(i), rate_matrix_template.X,
-          emission_mapping, state_mapping, initial_mapping, check_valid
-      );
-      y_hat.col(i) = epochs[i].y_hat;
-      residuals.col(i) = epochs[i].residual;
-      loglik += epochs[i].loglikelihood;
-    }
-
-    arma::mat gradient_X = arma::zeros(arma::size(_X));
-    arma::cube gradient_M (arma::size(_M));
-    arma::cube gradient_A (arma::size(_A));
-
-    for (int i = T - 1; i >= 0; --i)
-    {
-      arma::cube gradient_parameters = epochs[i].reverse_differentiate(gradient_X);
-      gradient_M.slice(i) = gradient_parameters.slice(0);
-      gradient_A.slice(i) = gradient_parameters.slice(1);
-    }
-
-    return py::make_tuple(
-      loglik,
-      from_mat<double>(_X), 
-      from_mat<double>(y_hat), 
-      from_mat<double>(residuals),
-      from_mat<double>(gradient_X),
-      from_cube<double>(gradient_M),
-      from_cube<double>(gradient_A)
-    );
-  }
-
-  py::tuple forward (pyarr<double> py_initial_state, pyarr<double> py_migration_matrix, pyarr<double> py_admixture_matrix)
+  py::tuple forward (pyarr<double> py_state, pyarr<double> py_migration_matrix, pyarr<double> py_admixture_matrix, pyarr<double> py_time_step)
   {
     /*
      *  Evolve state vectors across epochs
      */
 
-    arma::mat initial_state = to_mat<double>(py_initial_state);
-    arma::cube migration_matrix = to_mat<double>(py_migration_matrix);
-    arma::cube admixture_matrix = to_mat<double>(py_admixture_matrix);
+    arma::mat state = to_mat<double>(py_state);
+    arma::cube migration_matrix = to_cube<double>(py_migration_matrix);
+    arma::cube admixture_matrix = to_cube<double>(py_admixture_matrix);
+    arma::vec time_step = to_vec<double>(py_time_step);
+    arma::mat expected_rates (emission_mapping.n_cols, time_step.n_rows);
 
-    if (migration_matrix.n_slices != time_step.num_rows)
+    if (migration_matrix.n_slices != time_step.n_rows)
     {
       throw std::invalid_argument(prefix + "Demographic parameter array has the wrong dimensions");
     }
 
-    if (admixture_matrix.n_slices != time_step.num_rows)
+    if (admixture_matrix.n_slices != time_step.n_rows)
     {
       throw std::invalid_argument(prefix + "Admixture parameter array has the wrong dimensions");
     }
 
-    std::vector<CoalescentEpoch> epochs;
-    epochs.reserve(T);
-
-    arma::mat y_hat (emission_mapping.n_cols, T);
-
-    for (unsigned i = 0; i < T; ++i)
+    epochs.clear();
+    for (unsigned i = 0; i < time_step.n_rows; ++i)
     {
       epochs.emplace_back(
-          initial_state, migration_matrix.slice(i), admixture_matrix.slice(i), time_step.at(i), rate_matrix_template.X,
+          state, migration_matrix.slice(i), admixture_matrix.slice(i), time_step.at(i), 
           emission_mapping, state_mapping, initial_mapping, check_valid
       );
       expected_rates.col(i) = epochs[i].y_hat;
     }
 
-    arma::mat d_initial_state = arma::zeros(arma::size(initial_state));
-    arma::cube d_migration_matrix (arma::size(migration_matrix));
-    arma::cube d_admixture_matrix (arma::size(admixture_matrix));
+    return py::make_tuple(
+      from_mat<double>(state),
+      from_mat<double>(expected_rates)
+    );
+  }
 
-    for (int i = T - 1; i >= 0; --i)
+  py::tuple backward (pyarr<double> py_d_state, pyarr<double> py_d_expected_rate)
+  {
+    /*
+     *  Backpropagate gradient across epochs
+     */
+
+    arma::mat d_state = to_mat<double>(py_d_state); // typically should be zero, so maybe not worth passing in
+    arma::cube d_expected_rate = to_cube<double>(py_d_expected_rate);
+
+    if (d_expected_rate.n_slices != epochs.size())
     {
-      arma::cube gradient = epochs[i].reverse_differentiate(d_initial_state);
+      throw std::invalid_argument(prefix + "Gradient dimension does not match internal state size");
+    }
+
+    arma::cube d_migration_matrix (num_populations, num_populations, epochs.size());
+    arma::cube d_admixture_matrix (num_populations, num_populations, epochs.size());
+
+    for (int i = epochs.size() - 1; i >= 0; --i)
+    {
+      arma::cube gradient = epochs[i].reverse_differentiate(d_state, d_expected_rate.slice(i));
       d_migration_matrix.slice(i) = gradient.slice(0);
       d_admixture_matrix.slice(i) = gradient.slice(1);
     }
 
     return py::make_tuple(
-      from_mat<double>(d_initial_state),
+      from_mat<double>(d_state),
       from_cube<double>(d_migration_matrix),
       from_cube<double>(d_admixture_matrix)
     );
@@ -707,11 +698,11 @@ struct CoalescentDecoder
   pyarr<double> initial_state_vectors (void)
   {
     /*
-     *  Returns state vectors at time 0
+     *  Returns state vectors at time zero
      */
 
     arma::mat states = arma::zeros<arma::mat>(
-        arma::accu(rate_matrix_template.S), 
+        arma::accu(rate_matrix.S), 
         initial_mapping.n_cols
     );
     for (unsigned i = 0; i < initial_mapping.n_cols; ++i)
@@ -812,11 +803,12 @@ struct CoalescentDecoder
 
 PYBIND11_MODULE(coaldecoder, m) {
   py::class_<CoalescentDecoder>(m, "CoalescentDecoder")
-    .def(py::init<unsigned, pyarr<double>, bool>())
+    .def(py::init<unsigned, bool>())
     .def("initial_states", &CoalescentDecoder::initial_states)
     .def("emission_states", &CoalescentDecoder::emission_states)
     .def("transitory_states", &CoalescentDecoder::transitory_states)
-    .def("loglikelihood", &CoalescentDecoder::loglikelihood)
+    .def("forward", &CoalescentDecoder::forward)
+    .def("backward", &CoalescentDecoder::backward)
     .def("initial_state_vectors", &CoalescentDecoder::initial_state_vectors);
 }
 
