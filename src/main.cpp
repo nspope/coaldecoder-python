@@ -24,7 +24,7 @@ pyarr<double> add_col(const pyarr<double> a, const pyarr<double> b) {
 }
 
 
-PYBIND11_MODULE(cmake_example, m) {
+PYBIND11_MODULE(arma_converter_test, m) {
     m.def("add_cube", &add_cube);
     m.def("add_mat", &add_mat);
     m.def("add_col", &add_col);
