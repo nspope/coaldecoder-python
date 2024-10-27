@@ -3,6 +3,7 @@
 library(coaldecoder)
 reticulate::use_condaenv("base")
 reticulate::source_python(system.file("python", "calculate_rates.py", package = "coaldecoder"))
+np <- reticulate::import("numpy")
 
 num_pops <- 3
 haps <- 10
@@ -36,7 +37,35 @@ if(!file.exists("coaldecoder_example_chr1.ts")) {
   )
 }
 
-expected_rates <- pop_model$expected_coalescence_rates()
-np <- reticulate::import("numpy")
-np$save("expected_rates.npy", expected_rates)
+if(!file.exists("observed_rates_values.npy")){
+  # calculate "observed" trio coalescence rates within twenty-five 2500-generation epochs
+  obs_time_breaks <- seq(0, 50000, 2500)
+  sample_sets <- list( #sample indices in the tree sequence for each population
+    "A" = c(0:9),
+    "B" = c(10:19),
+    "C" = c(20:29)
+  )
+  obs_rates <- ObservedTrioRates(
+    ts = "coaldecoder_example_chr1.ts",
+    sample_sets = sample_sets,
+    time_breaks = obs_time_breaks,
+    bootstrap_blocks = 100,
+    mask = NULL,
+    threads = 1 #currently ignored
+  )
+
+  # extract rates and bootstrap precision
+  rates <- obs_rates$rates()
+  rates_sd <- obs_rates$std_dev(num_replicates=100, random_seed=1)
+  rownames(rates) <- rownames(rates_sd) <- obs_rates$emission_states()
+  colnames(rates) <- colnames(rates_sd) <- obs_rates$epochs()
+  np$save("observed_rates_values.npy", rates)
+  np$save("observed_rates_stddev.npy", rates_sd)
+  np$save("observed_rates_breaks.npy", obs_time_breaks)
+}
+
+np$save("expected_coalescence_rates.npy", pop_model$expected_coalescence_rates())
+np$save("epoch_durations.npy", pop_model$epoch_durations())
+np$save("demographic_parameters.npy", pop_model$demographic_parameters())
+np$save("admixture_coefficients.npy", pop_model$admixture_coefficients())
 
