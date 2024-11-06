@@ -127,13 +127,13 @@ class CMakeBuild(build_ext):
 # logic and declaration, and simpler if you include description/version in a file.
 setup(
     name="coaldecoder",
+    packages=['coaldecoder'],
     version="0.0.1",
     author="Nate Pope",
     author_email="natep@uoregon.edu",
     description="Fit demographic models to coalescence rates",
     long_description="",
-    #ext_modules=[CMakeExtension("coaldecoder"), CMakeExtension("arma_converter_test")],
-    ext_modules=[CMakeExtension("coaldecoder")],
+    ext_modules=[CMakeExtension("_coaldecoder")],
     cmdclass={"build_ext": CMakeBuild},
     zip_safe=False,
     extras_require={"test": ["pytest>=6.0"]},

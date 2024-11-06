@@ -82,7 +82,7 @@ struct TrioAdmixtureProportions
   {
     if (arma::any(populations > P))
     {
-      std::invalid_argument(prefix + " Linear index out-of-range");
+      throw std::invalid_argument(prefix + " Linear index out-of-range");
     }
 
     arma::uword index = 0;
@@ -113,14 +113,14 @@ struct TrioAdmixtureProportions
 
     if (A.n_rows != P || A.n_cols != P)
     {
-      std::invalid_argument(prefix + "Admixture matrix dimensions must equal populations");
+      throw std::invalid_argument(prefix + "Admixture matrix dimensions must equal populations");
     }
 
     if (check_valid)
     {
       if (arma::any(arma::vectorise(A) < 0.0) || arma::any(arma::vectorise(A) > 1.0))
       {
-        std::invalid_argument(prefix + "Admixture proportions invalid");
+        throw std::invalid_argument(prefix + "Admixture proportions invalid");
       }
     }
 
@@ -131,7 +131,7 @@ struct TrioAdmixtureProportions
       {
         if (std::fabs(arma::accu(A.col(i)) - 1.0) > A.n_rows*arma::datum::eps)
         {
-          std::invalid_argument(prefix + "Admixture proportions do not sum to one");
+          throw std::invalid_argument(prefix + "Admixture proportions do not sum to one");
         }
       }
       contributors[i] = arma::find(A.row(i) > 0.0);
@@ -218,7 +218,7 @@ struct TrioAdmixtureProportions
     if (values.size() != storage_bound)
     {
       std::cout << storage_bound << " " << values.size() << std::endl;
-      std::invalid_argument(prefix + "Storage bound violated");
+      throw std::invalid_argument(prefix + "Storage bound violated");
     }
 
     arma::umat locations = arma::join_vert(

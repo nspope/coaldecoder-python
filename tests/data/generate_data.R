@@ -59,10 +59,19 @@ if(!file.exists("observed_rates_values.npy")){
   rates_sd <- obs_rates$std_dev(num_replicates=100, random_seed=1)
   rownames(rates) <- rownames(rates_sd) <- obs_rates$emission_states()
   colnames(rates) <- colnames(rates_sd) <- obs_rates$epochs()
+  np$save("observed_rates_names.npy", obs_rates$emission_states())
   np$save("observed_rates_values.npy", rates)
   np$save("observed_rates_stddev.npy", rates_sd)
   np$save("observed_rates_breaks.npy", obs_time_breaks)
 }
+
+decoder <- CoalescentDecoder$new(num_pops, pop_model$epoch_durations(), TRUE)
+labels <- decoder$emission_states(c("A", "B", "C"))
+dummy_rates <- matrix(1, length(labels), length(time_breaks) - 1)
+dummy_weights <- matrix(1, length(labels), length(time_breaks) - 1)
+out <- decoder$loglikelihood(dummy_rates, dummy_weights, decoder$initial_state_vectors(), pop_model$demographic_parameters(), pop_model$admixture_coefficients())
+np$save("demographic_parameters_gradient.npy", out$gradient$M)
+exit()
 
 np$save("expected_coalescence_rates.npy", pop_model$expected_coalescence_rates())
 np$save("epoch_durations.npy", pop_model$epoch_durations())

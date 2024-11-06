@@ -43,7 +43,7 @@ inline
 pyarr<T> from_cube(arma::Cube<T> inp)
 {
     std::vector<py::ssize_t> shape = { (int) inp.n_rows, (int) inp.n_cols, (int) inp.n_slices };
-    std::vector<py::ssize_t> stride = { sizeof(T), sizeof(T) * (int) inp.n_rows, sizeof(T) * (int) (inp.n_rows * inp.n_cols) };
+    std::vector<py::ssize_t> stride = { (int) sizeof(T), (int) (sizeof(T) * inp.n_rows), (int) (sizeof(T) * inp.n_rows * inp.n_cols) };
     std::string format = py::format_descriptor<T>::format();
     py::ssize_t ndim = 3;
     py::ssize_t size = sizeof(T);
@@ -57,7 +57,7 @@ inline
 pyarr<T> from_mat(arma::Mat<T> inp)
 {
     std::vector<py::ssize_t> shape = { (int) inp.n_rows, (int) inp.n_cols };
-    std::vector<py::ssize_t> stride = { sizeof(T), sizeof(T) * (int) inp.n_rows };
+    std::vector<py::ssize_t> stride = { (int) sizeof(T), (int) (sizeof(T) * inp.n_rows) };
     std::string format = py::format_descriptor<T>::format();
     py::ssize_t ndim = 2;
     py::ssize_t size = sizeof(T);
@@ -70,7 +70,7 @@ inline
 pyarr<T> from_vec(arma::Col<T> inp)
 {
     std::vector<py::ssize_t> shape = { (int) inp.n_rows };
-    std::vector<py::ssize_t> stride = { sizeof(T) };
+    std::vector<py::ssize_t> stride = { (int) sizeof(T) };
     std::string format = py::format_descriptor<T>::format();
     py::ssize_t ndim = 1;
     py::ssize_t size = sizeof(T);

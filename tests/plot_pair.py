@@ -26,15 +26,14 @@ def rates_and_demography(
     demographic_parameters[0,1] = pulse_off[0] + np.exp(-(epoch_start - pulse_mode[0]) ** 2 / pulse_sd[0] ** 2) * (pulse_on[0] - pulse_off[0])
     demographic_parameters[1,0] = pulse_off[1] + np.exp(-(epoch_start - pulse_mode[1]) ** 2 / pulse_sd[1] ** 2) * (pulse_on[1] - pulse_off[1])
     demographic_parameters[1,1] = intercept[1] + amplitude[1] * np.cos(2 * np.pi * (epoch_start + phase[1]) * frequency[1])
-    demographic_parameters[2,2] = 10000
+    demographic_parameters[2,2] = np.inf
     admixture_coefficients = np.zeros((3, 3, grid_size - 1))
     for i in range(grid_size - 1): admixture_coefficients[:, :, i] = np.eye(3, 3)
 
-    decoder = CoalescentDecoder(3, True)
-    states = decoder.initial_state_vectors()
-    _, expected_rates = decoder.forward(states, demographic_parameters, admixture_coefficients, np.diff(time_grid))
+    decoder = TrioCoalescenceRateModel(3)
+    expected_rates = decoder.forward(demographic_parameters, admixture_coefficients, np.diff(time_grid))
 
-    state_labels = np.array(decoder.emission_states(['0','1','2']))
+    state_labels = np.array(decoder.labels(['0','1','2']))
     pair_subset = np.isin(state_labels, ["t1::((0,0),2)", "t1::((0,1),2)", "t1::((1,1),2)"])
     trio_subset = np.isin(state_labels, 
         ["t2::((0,0),0)", "t2::((0,0),1)", "t2::((0,1),0)", "t2::((0,1),1)", "t2::((1,1),0)", "t2::((1,1),1)"]
@@ -79,7 +78,10 @@ def make_plot(path, highlight=None, pairs_only=True, **kwargs):
     for i, label in enumerate(rate_names):
         ra_ax.plot(start / 1e3, rates[i], label=label)
     ra_ax.set_yscale('log')
-    ra_ax.set_ylabel("Pair coalescence rate")
+    if pairs_only:
+        ra_ax.set_ylabel("Pair coalescence rate")
+    else:
+        ra_ax.set_ylabel("Trio coalescence rate")
     ra_ax.legend(ncol=1, loc='lower right')
     if highlight is not None:
         ra_ax.add_patch(focal_highlight())
@@ -135,7 +137,10 @@ def make_anim(path, pairs_only=True, **kwargs):
     ra_ax.set_yscale('log')
     ra_ax.set_ylim(y_min_ra, y_max_ra)
     ra_ax.set_xlim(x_min, x_max)
-    ra_ax.set_ylabel("Pair coalescence rate")
+    if pairs_only:
+        ra_ax.set_ylabel("Pair coalescence rate")
+    else:
+        ra_ax.set_ylabel("Trio coalescence rate")
     ra_ax.legend(ncol=1, loc='lower right')
 
     fig.supxlabel("Thousands of generations in past")

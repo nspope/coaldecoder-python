@@ -145,7 +145,9 @@ struct TrioTransitionRates
      *  Nonredundant population labelling of trio, "{u_1, u_2, u_3}"
      */
 
-    if (names.size() != P) std::invalid_argument(prefix + "Population names are not the correct length");
+    if (names.size() != P) {
+      throw std::invalid_argument(prefix + "Population names are not the correct length");
+    }
 
     std::sort(initial.begin(), initial.end());
     std::string out = "{";
@@ -190,17 +192,19 @@ struct TrioTransitionRates
      *  clade is always (min, max).
      */
 
-    if (names.size() != P) std::invalid_argument(prefix + "Population names are not the correct length");
+    if (names.size() != P) {
+      throw std::invalid_argument(prefix + "Population names are not the correct length");
+    }
 
     unsigned surviving_lineages = arma::accu(absorbing != P);
     if (arma::any(absorbing > P) || surviving_lineages == 0 || surviving_lineages == 3)
     {
-      std::invalid_argument(prefix + "Absorbing state out-of-range");
+      throw std::invalid_argument(prefix + "Absorbing state out-of-range");
     }
 
     if (arma::any(initial >= P))
     {
-      std::invalid_argument(prefix + "Initial state out-of-range");
+      throw std::invalid_argument(prefix + "Initial state out-of-range");
     }
 
     arma::uvec::fixed<3> u;
@@ -300,7 +304,7 @@ struct TrioTransitionRates
     // assert that string array is sorted
     if (!std::is_sorted(initial_names.begin(), initial_names.end()))
     {
-      std::invalid_argument(prefix + " Initial states incorrectly named");
+      throw std::invalid_argument(prefix + " Initial states incorrectly named");
     }
 
     std::vector<arma::uword> col_indices;
@@ -346,11 +350,11 @@ struct TrioTransitionRates
     // assert that string arrays are sorted
     if (!std::is_sorted(initial_names.begin(), initial_names.end()))
     {
-      std::invalid_argument(prefix + " Initial states incorrectly named");
+      throw std::invalid_argument(prefix + " Initial states incorrectly named");
     }
     if (!std::is_sorted(emission_names.begin(), emission_names.end()))
     {
-      std::invalid_argument(prefix + " Emission states incorrectly named");
+      throw std::invalid_argument(prefix + " Emission states incorrectly named");
     }
 
     std::vector<arma::uword> col_indices;
@@ -374,7 +378,7 @@ struct TrioTransitionRates
           );
           if (initial_index == initial_names.end())
           {
-            std::invalid_argument(prefix + " Initial state out of range");
+            throw std::invalid_argument(prefix + " Initial state out of range");
           }
           arma::uvec::fixed<3> v;
 
@@ -396,7 +400,7 @@ struct TrioTransitionRates
                 if (emission_index == emission_names.end())
                 {
                   std::cout << "OOR: " << emission_state(u, v, names) << std::endl;
-                  std::invalid_argument(prefix + " Emission state out-of-range");
+                  throw std::invalid_argument(prefix + " Emission state out-of-range");
                 }
                 col_indices.emplace_back(initial_index - initial_names.begin());
                 row_indices.emplace_back(linear_index(v));
@@ -422,7 +426,7 @@ struct TrioTransitionRates
               if (emission_index == emission_names.end())
               {
                 std::cout << "OOR: " << emission_state(u, v, names) << std::endl;
-                std::invalid_argument(prefix + " Emission state out-of-range");
+                throw std::invalid_argument(prefix + " Emission state out-of-range");
               }
               col_indices.emplace_back(initial_index - initial_names.begin());
               row_indices.emplace_back(linear_index(v));
@@ -455,11 +459,11 @@ struct TrioTransitionRates
     // assert that string arrays are sorted
     if (!std::is_sorted(initial_names.begin(), initial_names.end()))
     {
-      std::invalid_argument(prefix + " Initial states incorrectly named");
+      throw std::invalid_argument(prefix + " Initial states incorrectly named");
     }
     if (!std::is_sorted(emission_names.begin(), emission_names.end()))
     {
-      std::invalid_argument(prefix + " Emission states incorrectly named");
+      throw std::invalid_argument(prefix + " Emission states incorrectly named");
     }
 
     arma::umat out (2, emission_names.size());
@@ -528,7 +532,7 @@ struct TrioTransitionRates
     {
       if (arma::any(M.diag() == 0.0) || arma::any(arma::vectorise(M) < 0.0))
       {
-        std::invalid_argument(prefix + "Invalid parameter matrix");
+        throw std::invalid_argument(prefix + "Invalid parameter matrix");
       }
     }
 
@@ -668,7 +672,7 @@ struct TrioTransitionRates
 
     if (values.size() != storage_bound) 
     {
-      std::invalid_argument(prefix + "Storage bound violated");
+      throw std::invalid_argument(prefix + "Storage bound violated");
     }
 
     arma::umat locations = arma::join_vert(
@@ -687,14 +691,14 @@ struct TrioTransitionRates
 
     if (_X.n_rows != arma::accu(S) || _X.n_cols != arma::accu(S))
     {
-      std::invalid_argument(prefix + "Template has wrong dimensions");
+      throw std::invalid_argument(prefix + "Template has wrong dimensions");
     }
 
     if (check_valid)
     {
       if (arma::any(M.diag() == 0.0) || arma::any(arma::vectorise(M) < 0.0))
       {
-        std::invalid_argument(prefix + "Invalid parameter matrix");
+        throw std::invalid_argument(prefix + "Invalid parameter matrix");
       }
     }
 
@@ -835,7 +839,7 @@ struct TrioTransitionRates
 
     if (gradient.n_rows != X.n_rows || gradient.n_cols != X.n_cols)
     {
-      std::invalid_argument(prefix + "Gradient dimensions do not equal matrix dimensions");
+      throw std::invalid_argument(prefix + "Gradient dimensions do not equal matrix dimensions");
     }
 
     arma::mat out (P, P, arma::fill::zeros);

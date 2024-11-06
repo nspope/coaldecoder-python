@@ -6,16 +6,9 @@ add_subdirectory(extern/pybind11)
 
 project(coaldecoder)
 
-#find_package(BLAS REQUIRED)
-#find_package(LAPACK REQUIRED)
-
-#pybind11_add_module(arma_converter_test src/coalescent_model.cpp)
-#target_include_directories(arma_converter_test PRIVATE extern/armadillo-code/include)
-
-pybind11_add_module(coaldecoder src/coalescent_model.cpp)
-target_include_directories(coaldecoder PRIVATE extern/armadillo/include)
-target_link_libraries(coaldecoder PUBLIC armadillo)
-#target_link_libraries(coaldecoder PUBLIC ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+pybind11_add_module(_coaldecoder src/coalescent_model.cpp)
+target_include_directories(_coaldecoder PRIVATE extern/armadillo/include)
+target_link_libraries(_coaldecoder PUBLIC armadillo)
 
 # EXAMPLE_VERSION_INFO is defined by setup.py and passed into the C++ code as a
 # define (VERSION_INFO) here.
