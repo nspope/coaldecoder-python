@@ -459,10 +459,7 @@ class TrioCoalescenceRates:
         total_trios = np.concatenate([total_trios, total_trios], axis=0)
         self.y = trio_counts.transpose(2, 1, 0)
         self.n = total_trios[:, np.newaxis, :] - self._share_denominator_across_initial_states(self.y.cumsum(axis=1))
-        self.total_trios = total_trios #DEBUG
-
-        #self.n = self._share_denominator_across_initial_states(block_n)
-        #self.y = block_y
+        self.total_trios = total_trios
 
     def _share_denominator_across_initial_states (self, n):
         """
@@ -544,6 +541,12 @@ class TrioCoalescenceRates:
         return rates
     #/TODO
 
+    def windowed_rates(self):
+        rates = self.y / self.n
+        for i in range(self.num_time_windows):
+            rates[:, i, :] /= (self.time_breaks[i + 1] - self.time_breaks[i])
+        return rates
+
     def block_bootstrap (self, num_replicates, random_seed=None):
         num_replicates = int(num_replicates)
         assert num_replicates > 0
@@ -585,3 +588,70 @@ class TrioCoalescenceRates:
             rates[:,:,i] = x
         return rates
 
+
+class PairCoalescenceRates(TrioCoalescenceRates):
+    """
+    Class that calculates rates of first and second trio coalescences in a tree
+    sequence and optionally block-bootstraps these counts
+    """
+
+    def __init__ (self, ts, sample_sets, time_breaks, sample_set_names=None, bootstrap_blocks=None, check_binary=True):
+
+        self.prefix = "[PairCoalescenceRates] "
+
+        if isinstance(ts, str):
+            ts = tskit.load(ts)
+        else:
+            assert isinstance(ts, tskit.TreeSequence), "Input is not tree sequence"
+        self.sequence_length = ts.sequence_length
+
+        if bootstrap_blocks is None:
+            bootstrap_blocks = np.array([0, ts.sequence_length])
+        self.block_span = np.diff(bootstrap_blocks) / self.sequence_length
+        self.num_blocks = bootstrap_blocks.size - 1
+
+        self.sample_sets = sample_sets
+        self.sample_set_sizes = np.array([len(s) for s in sample_sets])
+        self.num_sample_sets = self.sample_set_sizes.size
+        if sample_set_names is None:
+            sample_set_names = [str(i) for i in np.arange(self.num_sample_sets)]
+        self.sample_set_names = sample_set_names
+
+        self.time_breaks = time_breaks
+        self.num_time_windows = self.time_breaks.size - 1
+
+        # calculate weights per block
+        self.num_weights = int(self.num_sample_sets * (self.num_sample_sets + 1) / 2)
+
+        pair_indexes = []
+        total_pairs = []
+        for a, b in combn_replace(range(self.num_sample_sets), 2):
+            pair_indexes.append([a, b])
+            n_a, n_b = self.sample_set_sizes[a], self.sample_set_sizes[b]
+            pair_size = int(n_a * (n_a - 1) / 2) if a == b else int(n_a * n_b)
+            total_pairs.append(pair_size)
+        pair_indexes = np.array(pair_indexes).astype(np.int32)
+        total_pairs = np.array(total_pairs)[:, np.newaxis] * self.block_span[np.newaxis, :]
+        # NB: in contrast to trio coalescence rates, these aren't divided by total sequence length
+        pair_counts = ts.pair_coalescence_counts(
+            sample_sets, 
+            pair_indexes, 
+            windows=bootstrap_blocks, 
+            time_windows=time_breaks, 
+            span_normalise=False,
+            pair_normalise=False,
+        ) / ts.sequence_length
+        self.y = pair_counts.transpose(1, 2, 0)
+        self.n = total_pairs[:, np.newaxis, :] - self.y.cumsum(axis=1)
+        self.total_pairs = total_pairs
+
+    def labels (self):
+        pair_labels = []
+        for a, b in combn_replace(range(self.num_sample_sets), 2):
+            pair_label = self.sample_set_names[a] + ',' + self.sample_set_names[b]
+            pair_labels += ["(" + pair_label + ")"]
+        return pair_labels
+
+    def configurations (self):
+        pair_labels = self.labels()
+        return [x.replace("(", "{").replace(")", "}") for x in pair_labels]
