@@ -591,7 +591,7 @@ class TrioCoalescenceRates:
 
 class PairCoalescenceRates(TrioCoalescenceRates):
     """
-    Class that calculates rates of first and second trio coalescences in a tree
+    Class that calculates rates of pair coalescences in a tree
     sequence and optionally block-bootstraps these counts
     """
 
